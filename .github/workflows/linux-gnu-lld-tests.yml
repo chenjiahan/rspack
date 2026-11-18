@@ -1,0 +1,52 @@
+name: Linux GNU LLD runtime compatibility
+on:
+  push:
+    branches: [chenjiahan/linux-gnu-lld-tests]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  integration:
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+        platform:
+          - { runner: ubuntu-22.04, arch: x64, artifact: lld-x64-ci }
+          - { runner: ubuntu-24.04-arm, arch: arm64, artifact: lld-arm64-ci }
+    runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: ./.github/actions/pnpm/setup
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Wait for the compiled artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for attempt in $(seq 1 60); do
+            if gh api "repos/$GITHUB_REPOSITORY/actions/runs/44253500149/artifacts" --jq '.artifacts[].name' | rg -x '${{ matrix.platform.artifact }}'; then
+              exit 0
+            fi
+            sleep 30
+          done
+          exit 1
+      - uses: actions/download-artifact@65a9edc5881444af0b9093a5e628f2fe47ea3b2e
+        with:
+          name: ${{ matrix.platform.artifact }}
+          run-id: 44253500149
+          github-token: ${{ github.token }}
+          path: .lld-verified
+      - run: cp .lld-verified/variants/lld.node crates/node_binding/rspack.linux-${{ matrix.platform.arch }}-gnu.node
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build:js
+      - name: Browser setup
+        run: pnpm --dir tests/e2e exec playwright install --with-deps chromium
+      - name: Resource cases and HMR on Node 22
+        if: matrix.node == 22
+        run: |
+          pnpm --dir tests/rspack-test run test -t "configCases/asset"
+          pnpm test:hot
+      - name: Browser E2E
+        run: pnpm test:e2e
