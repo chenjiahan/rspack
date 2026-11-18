@@ -1,0 +1,73 @@
+name: Linux GNU bundled LLD validation
+on:
+  push:
+    branches: [chenjiahan/linux-gnu-lld-verify]
+permissions:
+  contents: read
+jobs:
+  validate:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: x64-release
+            runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            profile: release
+          - name: x64-ci
+            runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            profile: ci
+          - name: arm64-ci
+            runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            profile: ci
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    env:
+      RUST_TARGET: ${{ matrix.target }}
+      LLD_AB_PROFILE: ${{ matrix.profile }}
+      CARGO_INCREMENTAL: 0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          fetch-depth: 2
+      - uses: ./.github/actions/pnpm/setup
+        with:
+          node-version: 24
+      - uses: ./.github/actions/rustup
+        with:
+          key: lld-verify
+          use-cache: false
+      - run: pnpm install --frozen-lockfile
+      - name: Code generation and JavaScript artifacts
+        run: |
+          cargo codegen
+          pnpm build:js
+      - name: Full native builds and repeated final links
+        run: python3 scripts/experiments/fork-lld.py build
+      - name: Integration and HMR
+        if: matrix.profile == 'ci'
+        run: |
+          pnpm --dir tests/rspack-test run test -t "configCases/asset"
+          pnpm test:hot
+          pnpm test:e2e
+      - name: Prepare build-tools-performance
+        if: matrix.profile == 'release'
+        run: |
+          git clone https://github.com/rspack-contrib/build-tools-performance.git .linux-lld-btp
+          git -C .linux-lld-btp checkout 7367c8ff45bb616ef5b07e0ac4de7e96ed93a761
+          cd .linux-lld-btp
+          pnpm install --no-frozen-lockfile
+      - name: Runtime A-A-B benchmark
+        if: matrix.profile == 'release'
+        run: python3 scripts/experiments/fork-lld.py bench
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: lld-${{ matrix.name }}
+          include-hidden-files: true
+          path: |
+            .linux-lld-results/*.json
+            .linux-lld-results/*.log
+            .linux-lld-results/variants/*.node

@@ -48,6 +48,10 @@ rustflags = ["-C", "link-args=-Wl,-undefined,dynamic_lookup,-no_fixup_chains,-al
 [target.'cfg(target_os = "macos")']
 linker = "scripts/macos-linker.sh"
 
+# Like Turbopack, use Rust's bundled LLD through the compiler driver.
+[target.'cfg(all(target_os = "linux", target_env = "gnu", any(target_arch = "x86_64", target_arch = "aarch64")))']
+rustflags = ["-Zunstable-options", "-Clinker-flavor=gnu-lld-cc", "-Clink-self-contained=+linker"]
+
 # To be able to run unit tests on Windows, support compilation to 'x86_64-pc-windows-msvc'.
 # Use Hybrid CRT to reduce the size of the binary (Coming by default with Windows 10 and later versions).
 [target.'cfg(target_os = "windows")']

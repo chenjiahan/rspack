@@ -64,6 +64,11 @@ async function build() {
 		}
 		if (process.env.USE_NAPI_CROSS) {
 			args.push("--use-napi-cross");
+			if (["x86_64-unknown-linux-gnu", "aarch64-unknown-linux-gnu"].includes(process.env.RUST_TARGET)) {
+				// NAPI cross's GCC 4.8 cannot select LLD; keep its sysroot through clang.
+				const linkerEnv = `CARGO_TARGET_${process.env.RUST_TARGET.toUpperCase().replaceAll("-", "_")}_LINKER`;
+				envs[linkerEnv] ||= path.resolve(import.meta.dirname, "../../../scripts/linux-cross-linker.sh");
+			}
 		}
 		if (process.env.USE_ZIG) {
 			args.push("--cross-compile");
