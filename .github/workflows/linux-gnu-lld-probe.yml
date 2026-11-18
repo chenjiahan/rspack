@@ -1,0 +1,26 @@
+name: Linux GNU cross-link compatibility probe
+on:
+  push:
+    branches: [chenjiahan/linux-gnu-lld-probe]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: ./.github/actions/rustup
+        with:
+          key: lld-probe
+          use-cache: false
+      - name: Cross-link x64 and arm64 using NAPI sysroots
+        run: |
+          npm install --prefix /tmp/lld-probe @napi-rs/cross-toolchain@1.0.5
+          rustup target add x86_64-unknown-linux-gnu aarch64-unknown-linux-gnu
+          python3 scripts/experiments/lld-probe.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: cross-probe
+          path: /tmp/lld-probe/results.json
